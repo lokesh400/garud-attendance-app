@@ -38,7 +38,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#667eea' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#4338ca' }}>
         <ActivityIndicator size="large" color="#fff" />
         <StatusBar style="light" />
       </View>

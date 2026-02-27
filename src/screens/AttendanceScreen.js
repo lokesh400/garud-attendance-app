@@ -9,12 +9,16 @@ import {
   Image,
   SafeAreaView,
   StatusBar,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { WebView } from 'react-native-webview';
 import { getEmployees, confirmAttendance } from '../services/api';
 import { findBestMatch } from '../utils/faceMatch';
 import FACE_DETECTION_HTML from '../utils/faceDetectionHTML';
+
+const { width } = Dimensions.get('window');
 
 export default function AttendanceScreen({ user, onLogout }) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -29,8 +33,54 @@ export default function AttendanceScreen({ user, onLogout }) {
 
   const cameraRef = useRef(null);
   const webViewRef = useRef(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const scanAnim = useRef(new Animated.Value(0)).current;
+  const resultSlide = useRef(new Animated.Value(50)).current;
+  const resultOpacity = useRef(new Animated.Value(0)).current;
 
-  // Load employees on mount
+  // Pulse animation for the capture button
+  useEffect(() => {
+    if (modelsLoaded && employees.length > 0 && !capturing && !matchResult) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.08, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    }
+  }, [modelsLoaded, employees, capturing, matchResult]);
+
+  // Scanning animation while capturing
+  useEffect(() => {
+    if (capturing) {
+      const scan = Animated.loop(
+        Animated.sequence([
+          Animated.timing(scanAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.timing(scanAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+        ])
+      );
+      scan.start();
+      return () => scan.stop();
+    } else {
+      scanAnim.setValue(0);
+    }
+  }, [capturing]);
+
+  // Slide in result card
+  useEffect(() => {
+    if (matchResult) {
+      Animated.parallel([
+        Animated.spring(resultSlide, { toValue: 0, tension: 50, friction: 8, useNativeDriver: true }),
+        Animated.timing(resultOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start();
+    } else {
+      resultSlide.setValue(50);
+      resultOpacity.setValue(0);
+    }
+  }, [matchResult]);
+
   useEffect(() => {
     loadEmployees();
   }, []);
@@ -41,12 +91,12 @@ export default function AttendanceScreen({ user, onLogout }) {
       const emps = await getEmployees();
       setEmployees(emps);
       if (emps.length === 0) {
-        setStatus('No registered employees found. Register employees on the web app first.');
+        setStatus('No employees registered yet. Add them from the web app.');
       } else {
         setStatus(
           modelsLoaded
-            ? `Ready! ${emps.length} employee(s) loaded. Tap "Capture Face" to begin.`
-            : 'Loading face detection AI models...'
+            ? `Ready To Mark Attendance`
+            : 'Loading AI models...'
         );
       }
     } catch (error) {
@@ -55,12 +105,11 @@ export default function AttendanceScreen({ user, onLogout }) {
         onLogout();
         return;
       }
-      setStatus('Failed to load employees. Check server connection.');
+      setStatus('Failed to load employees');
       Alert.alert('Error', error.message);
     }
   }
 
-  // Handle messages from the WebView (face-api.js results)
   function onWebViewMessage(event) {
     try {
       const data = JSON.parse(event.nativeEvent.data);
@@ -68,81 +117,69 @@ export default function AttendanceScreen({ user, onLogout }) {
         case 'modelsLoaded':
           setModelsLoaded(true);
           if (employees.length > 0) {
-            setStatus(`Ready! ${employees.length} employee(s) loaded. Tap "Capture Face".`);
+            setStatus(`Ready To Mark Attendance`);
           }
           break;
-
         case 'status':
           setStatus(data.message);
           break;
-
         case 'faceDetected':
           handleFaceDetected(data.descriptor);
           break;
-
         case 'noFace':
           setCapturing(false);
-          setStatus('No face detected. Ensure your face is clearly visible and try again.');
-          Alert.alert('No Face Detected', 'Please position your face clearly in the camera and try again.');
+          setStatus('No face detected. Try again.');
+          Alert.alert('No Face Detected', 'Position your face clearly in the oval guide and try again.');
           break;
-
         case 'error':
           setCapturing(false);
           setStatus(`Error: ${data.message}`);
           break;
       }
-    } catch (e) {
-      // ignore parse errors
-    }
+    } catch (e) {}
   }
 
   function handleFaceDetected(descriptor) {
     const result = findBestMatch(descriptor, employees);
-
     if (result) {
       setMatchResult(result);
-      setStatus(`Matched: ${result.employee.name} (${result.confidence}% confidence)`);
+      setStatus(`Matched: ${result.employee.name}`);
     } else {
-      setStatus('Face not recognized. Ensure the employee is registered.');
+      setStatus('Face not recognized');
       Alert.alert('Not Recognized', 'Face does not match any registered employee.');
     }
     setCapturing(false);
   }
 
-  // Capture photo and send to WebView for face detection
   async function captureAndDetect() {
     if (!cameraRef.current || !modelsLoaded) return;
 
     setCapturing(true);
     setMatchResult(null);
-    setStatus('Capturing face...');
+    setCapturedPhoto(null);
+    setStatus('Scanning face...');
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
         base64: true,
-        quality: 0.6,
+        quality: 0.5,
         skipProcessing: true,
       });
 
       setCapturedPhoto(photo.uri);
-      setStatus('Processing face...');
+      setStatus('Analyzing...');
 
-      // Send base64 image to WebView for face detection
       const message = JSON.stringify({ type: 'detect', base64: photo.base64 });
-      webViewRef.current?.injectJavaScript(
-        `window.dispatchEvent(new MessageEvent('message', { data: '${message.replace(/'/g, "\\'")}' })); true;`
-      );
-
-      // Fallback: also post message directly
+      // Use postMessage only — injectJavaScript with large base64 strings
+      // can exceed max JS string length or break on special characters
       webViewRef.current?.postMessage(message);
     } catch (error) {
       setCapturing(false);
-      setStatus('Failed to capture photo. Try again.');
+      setStatus('Capture failed. Try again.');
       Alert.alert('Error', 'Failed to capture photo: ' + error.message);
     }
   }
 
-  // Confirm attendance for matched employee
   async function handleConfirm() {
     if (!matchResult) return;
 
@@ -150,8 +187,8 @@ export default function AttendanceScreen({ user, onLogout }) {
     try {
       const data = await confirmAttendance(matchResult.employee.id);
       Alert.alert(
-        'Success!',
-        `Attendance marked for ${data.user.name}\nTime: ${data.time}\nDate: ${data.date}`
+        'Attendance Marked! ✓',
+        `${data.user.name}\n${data.date} at ${data.time}`
       );
       resetState();
     } catch (error) {
@@ -170,24 +207,28 @@ export default function AttendanceScreen({ user, onLogout }) {
     setMatchResult(null);
     setCapturedPhoto(null);
     setCapturing(false);
-    setStatus(`Ready! ${employees.length} employee(s) loaded. Tap "Capture Face".`);
+    setStatus(`Ready To Mark Attendance`);
   }
 
-  // Camera permission not yet determined
   if (!permission) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#6366f1" />
+        <ActivityIndicator size="large" color="#4338ca" />
       </View>
     );
   }
 
-  // Camera permission not granted
   if (!permission.granted) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <Text style={styles.permissionText}>Camera access is required for face detection.</Text>
+          <View style={styles.permissionIcon}>
+            <Text style={{ fontSize: 48 }}>📷</Text>
+          </View>
+          <Text style={styles.permissionTitle}>Camera Access Required</Text>
+          <Text style={styles.permissionText}>
+            We need camera access to detect and recognize faces for attendance marking.
+          </Text>
           <TouchableOpacity style={styles.primaryButton} onPress={requestPermission}>
             <Text style={styles.primaryButtonText}>Grant Camera Access</Text>
           </TouchableOpacity>
@@ -198,83 +239,139 @@ export default function AttendanceScreen({ user, onLogout }) {
 
   const isReady = modelsLoaded && employees.length > 0;
 
+  const scanLineTranslate = scanAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-120, 120],
+  });
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#667eea" />
+      <StatusBar barStyle="light-content" backgroundColor="#4338ca" />
 
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Mark Attendance</Text>
-          <Text style={styles.headerSubtitle}>👤 {user?.username} ({user?.role})</Text>
+      </View>
+
+      {/* Status Chip */}
+      <View style={styles.statusChip}>
+        <View style={[
+          styles.statusDot,
+          modelsLoaded && employees.length > 0 ? styles.dotGreen :
+          modelsLoaded ? styles.dotOrange : styles.dotYellow,
+        ]} />
+        <Text style={styles.statusText} numberOfLines={1}>{status}</Text>
+        {capturing && <ActivityIndicator size="small" color="#6366f1" style={{ marginLeft: 8 }} />}
+      </View>
+
+      {/* Camera Area */}
+      <View style={styles.cameraWrapper}>
+        <View style={styles.cameraContainer}>
+          {capturedPhoto && matchResult ? (
+            <Image source={{ uri: capturedPhoto }} style={styles.capturedImage} />
+          ) : (
+            <CameraView ref={cameraRef} style={styles.camera} facing={facing}>
+              <View style={styles.cameraOverlay}>
+                {/* Corner brackets for face guide */}
+                <View style={styles.faceGuideArea}>
+                  <View style={[styles.corner, styles.cornerTL]} />
+                  <View style={[styles.corner, styles.cornerTR]} />
+                  <View style={[styles.corner, styles.cornerBL]} />
+                  <View style={[styles.corner, styles.cornerBR]} />
+
+                  {/* Scanning line */}
+                  {capturing && (
+                    <Animated.View
+                      style={[
+                        styles.scanLine,
+                        { transform: [{ translateY: scanLineTranslate }] },
+                      ]}
+                    />
+                  )}
+                </View>
+
+                <Text style={styles.cameraHint}>
+                  {capturing ? 'Hold still...' : 'Position face in frame'}
+                </Text>
+              </View>
+            </CameraView>
+          )}
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* Status Bar */}
-      <View style={styles.statusBar}>
-        <View style={[styles.statusDot, modelsLoaded ? styles.dotGreen : styles.dotYellow]} />
-        <Text style={styles.statusText} numberOfLines={2}>{status}</Text>
-      </View>
-
-      {/* Camera / Captured Photo */}
-      <View style={styles.cameraContainer}>
-        {capturedPhoto && matchResult ? (
-          <Image source={{ uri: capturedPhoto }} style={styles.capturedImage} />
-        ) : (
-          <CameraView
-            ref={cameraRef}
-            style={styles.camera}
-            facing={facing}
+        {/* Flip camera button */}
+        {!matchResult && (
+          <TouchableOpacity
+            style={styles.flipBtn}
+            onPress={() => setFacing(f => f === 'front' ? 'back' : 'front')}
+            activeOpacity={0.7}
           >
-            <View style={styles.cameraOverlay}>
-              <View style={styles.faceGuide} />
-            </View>
-          </CameraView>
+            <Text style={styles.flipText}>🔄</Text>
+          </TouchableOpacity>
         )}
       </View>
 
-      {/* Match Result */}
+      {/* Match Result Card */}
       {matchResult && (
-        <View style={styles.resultCard}>
-          <Text style={styles.resultTitle}>✓ Face Recognized!</Text>
-          <Text style={styles.resultName}>{matchResult.employee.name}</Text>
-          <Text style={styles.resultId}>ID: {matchResult.employee.employeeId}</Text>
-          <Text style={styles.resultConfidence}>Confidence: {matchResult.confidence}%</Text>
-        </View>
+        <Animated.View
+          style={[
+            styles.resultCard,
+            { opacity: resultOpacity, transform: [{ translateY: resultSlide }] },
+          ]}
+        >
+          <View style={styles.resultLeft}>
+            <View style={styles.resultBadge}>
+              <Text style={styles.resultBadgeText}>✓</Text>
+            </View>
+            <View style={styles.resultInfo}>
+              <Text style={styles.resultName}>{matchResult.employee.name}</Text>
+              <Text style={styles.resultId}>ID: {matchResult.employee.employeeId}</Text>
+            </View>
+          </View>
+          <View style={styles.confidenceTag}>
+            <Text style={styles.confidenceText}>{matchResult.confidence}%</Text>
+          </View>
+        </Animated.View>
       )}
 
       {/* Action Buttons */}
       <View style={styles.actions}>
         {!matchResult ? (
-          <TouchableOpacity
-            style={[styles.primaryButton, (!isReady || capturing) && styles.buttonDisabled]}
-            onPress={captureAndDetect}
-            disabled={!isReady || capturing}
-            activeOpacity={0.8}
-          >
-            {capturing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>
-                {!modelsLoaded ? 'Loading Models...' : employees.length === 0 ? 'No Employees' : '📸  Capture Face'}
-              </Text>
-            )}
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: isReady && !capturing ? pulseAnim : 1 }] }}>
+            <TouchableOpacity
+              style={[
+                styles.captureButton,
+                (!isReady || capturing) && styles.buttonDisabled,
+              ]}
+              onPress={captureAndDetect}
+              disabled={!isReady || capturing}
+              activeOpacity={0.85}
+            >
+              {capturing ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={styles.captureButtonText}>  Scanning...</Text>
+                </View>
+              ) : (
+                <Text style={styles.captureButtonText}>
+                  {!modelsLoaded ? '⏳  Loading Models...' : employees.length === 0 ? 'No Employees' : '📸  Capture & Recognize'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
         ) : (
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={[styles.confirmButton, confirming && styles.buttonDisabled]}
               onPress={handleConfirm}
               disabled={confirming}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               {confirming ? (
-                <ActivityIndicator color="#fff" />
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={styles.actionButtonText}>  Marking...</Text>
+                </View>
               ) : (
-                <Text style={styles.primaryButtonText}>✓ Confirm Attendance</Text>
+                <Text style={styles.actionButtonText}>✓  Confirm</Text>
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -282,13 +379,13 @@ export default function AttendanceScreen({ user, onLogout }) {
               onPress={resetState}
               activeOpacity={0.8}
             >
-              <Text style={styles.retakeText}>Retake</Text>
+              <Text style={styles.retakeText}>↺  Retake</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      {/* Hidden WebView for face-api.js processing */}
+      {/* Hidden WebView */}
       <View style={styles.hiddenWebView}>
         <WebView
           ref={webViewRef}
@@ -307,85 +404,123 @@ export default function AttendanceScreen({ user, onLogout }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#0f172a',
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 30,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#0f172a',
+  },
+  permissionIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(99,102,241,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  permissionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#f1f5f9',
+    marginBottom: 8,
   },
   permissionText: {
-    fontSize: 16,
-    color: '#475569',
+    fontSize: 15,
+    color: '#94a3b8',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 28,
+    lineHeight: 22,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#667eea',
+    backgroundColor: '#4338ca',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingTop: 20,
+    paddingVertical: 14,
+    paddingTop: 18,
+  },
+  headerLeft: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: '#fff',
+    letterSpacing: -0.3,
   },
-  headerSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 2,
-  },
-  logoutBtn: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  logoutText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  statusBar: {
+  userBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    marginTop: 4,
+  },
+  userDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#34d399',
+    marginRight: 6,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  logoutBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoutText: {
+    fontSize: 18,
+    color: '#fff',
+  },
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e293b',
     marginHorizontal: 16,
     marginTop: 12,
-    padding: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     marginRight: 10,
   },
-  dotGreen: { backgroundColor: '#10b981' },
-  dotYellow: { backgroundColor: '#f59e0b' },
+  dotGreen: { backgroundColor: '#34d399' },
+  dotYellow: { backgroundColor: '#fbbf24' },
+  dotOrange: { backgroundColor: '#fb923c' },
   statusText: {
     flex: 1,
     fontSize: 13,
-    color: '#475569',
+    color: '#cbd5e1',
+    fontWeight: '500',
   },
-  cameraContainer: {
+  cameraWrapper: {
     flex: 1,
     marginHorizontal: 16,
     marginTop: 12,
-    borderRadius: 16,
+    position: 'relative',
+  },
+  cameraContainer: {
+    flex: 1,
+    borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#000',
+    borderWidth: 2,
+    borderColor: '#334155',
   },
   camera: {
     flex: 1,
@@ -398,91 +533,213 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.15)',
   },
-  faceGuide: {
+  faceGuideArea: {
     width: 220,
     height: 280,
-    borderRadius: 110,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.5)',
-    borderStyle: 'dashed',
+    position: 'relative',
+  },
+  corner: {
+    position: 'absolute',
+    width: 30,
+    height: 30,
+    borderColor: '#818cf8',
+    borderWidth: 3,
+  },
+  cornerTL: {
+    top: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 16,
+  },
+  cornerTR: {
+    top: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+    borderTopRightRadius: 16,
+  },
+  cornerBL: {
+    bottom: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 16,
+  },
+  cornerBR: {
+    bottom: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
+    borderBottomRightRadius: 16,
+  },
+  scanLine: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    height: 2,
+    backgroundColor: '#818cf8',
+    top: '50%',
+    shadowColor: '#818cf8',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cameraHint: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 16,
+    letterSpacing: 0.5,
+  },
+  flipBtn: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(30,41,59,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#475569',
+  },
+  flipText: {
+    fontSize: 20,
   },
   resultCard: {
-    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1e293b',
     marginHorizontal: 16,
     marginTop: 12,
     padding: 16,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#10b981',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#34d399',
   },
-  resultTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#10b981',
-    marginBottom: 6,
+  resultLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  resultBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(52,211,153,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  resultBadgeText: {
+    fontSize: 22,
+    color: '#34d399',
+  },
+  resultInfo: {
+    flex: 1,
   },
   resultName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#1e293b',
+    color: '#f1f5f9',
   },
   resultId: {
-    fontSize: 14,
-    color: '#64748b',
+    fontSize: 13,
+    color: '#94a3b8',
     marginTop: 2,
   },
-  resultConfidence: {
-    fontSize: 13,
-    color: '#6366f1',
-    marginTop: 4,
-    fontWeight: '600',
+  confidenceTag: {
+    backgroundColor: 'rgba(99,102,241,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  confidenceText: {
+    color: '#a5b4fc',
+    fontSize: 15,
+    fontWeight: '700',
   },
   actions: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   actionRow: {
     flexDirection: 'row',
     gap: 10,
   },
-  primaryButton: {
-    backgroundColor: '#6366f1',
-    borderRadius: 14,
-    padding: 16,
+  captureButton: {
+    backgroundColor: '#4338ca',
+    borderRadius: 16,
+    padding: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#4338ca',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  captureButtonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   confirmButton: {
     flex: 1,
-    backgroundColor: '#10b981',
-    borderRadius: 14,
-    padding: 16,
+    backgroundColor: '#059669',
+    borderRadius: 16,
+    padding: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   retakeButton: {
-    backgroundColor: '#e2e8f0',
-    borderRadius: 14,
-    padding: 16,
-    paddingHorizontal: 24,
+    backgroundColor: '#1e293b',
+    borderRadius: 16,
+    padding: 18,
+    paddingHorizontal: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#475569',
   },
   retakeText: {
-    color: '#475569',
+    color: '#cbd5e1',
     fontWeight: '600',
     fontSize: 15,
   },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
+  },
+  primaryButton: {
+    backgroundColor: '#4338ca',
+    borderRadius: 16,
+    padding: 18,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   primaryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  actionButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',

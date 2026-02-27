@@ -20,10 +20,17 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "package": "com.lokesh400.GarudAttendMark"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "332ee353-ab68-4b70-a335-2e181daf5e20"
+      }
+    },
+    "owner": "lokesh400"
   }
 }

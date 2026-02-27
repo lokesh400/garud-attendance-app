@@ -1,6 +1,5 @@
 // HTML content for the hidden WebView that runs face-api.js
-// This WebView loads face detection models and processes base64 images
-// to extract face descriptors, which are sent back to React Native.
+// Uses TinyFaceDetector for faster detection + image downscaling for speed.
 
 const FACE_DETECTION_HTML = `
 <!DOCTYPE html>
@@ -13,6 +12,7 @@ const FACE_DETECTION_HTML = `
 <canvas id="canvas" style="display:none"></canvas>
 <script>
   let modelsLoaded = false;
+  const MAX_DIM = 480; // downscale images to this max dimension for speed
 
   function sendMessage(data) {
     window.ReactNativeWebView.postMessage(JSON.stringify(data));
@@ -23,8 +23,8 @@ const FACE_DETECTION_HTML = `
       sendMessage({ type: 'status', message: 'Loading face detection models...' });
       const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model';
       await Promise.all([
-        faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
         faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
       ]);
       modelsLoaded = true;
@@ -32,6 +32,25 @@ const FACE_DETECTION_HTML = `
     } catch (error) {
       sendMessage({ type: 'error', message: 'Failed to load models: ' + error.message });
     }
+  }
+
+  function downscaleToCanvas(img) {
+    const canvas = document.getElementById('canvas');
+    let w = img.width;
+    let h = img.height;
+
+    // Downscale if larger than MAX_DIM
+    if (w > MAX_DIM || h > MAX_DIM) {
+      const scale = MAX_DIM / Math.max(w, h);
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+    }
+
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas;
   }
 
   async function detectFace(base64Data) {
@@ -46,15 +65,11 @@ const FACE_DETECTION_HTML = `
       const img = new Image();
       img.onload = async () => {
         try {
-          const canvas = document.getElementById('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0);
+          const canvas = downscaleToCanvas(img);
 
           const detection = await faceapi
-            .detectSingleFace(canvas, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
-            .withFaceLandmarks()
+            .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+            .withFaceLandmarks(true)
             .withFaceDescriptor();
 
           if (detection) {
@@ -80,25 +95,22 @@ const FACE_DETECTION_HTML = `
     }
   }
 
-  // Listen for messages from React Native
-  window.addEventListener('message', (event) => {
+  // Debounce to prevent duplicate processing
+  let detecting = false;
+  function handleMessage(event) {
+    if (detecting) return;
     try {
       const data = JSON.parse(event.data);
       if (data.type === 'detect') {
-        detectFace(data.base64);
+        detecting = true;
+        detectFace(data.base64).finally(() => { detecting = false; });
       }
     } catch (e) {}
-  });
+  }
 
-  // Also handle document message events (Android compatibility)
-  document.addEventListener('message', (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'detect') {
-        detectFace(data.base64);
-      }
-    } catch (e) {}
-  });
+  // Listen on both window and document for cross-platform compatibility
+  window.addEventListener('message', handleMessage);
+  document.addEventListener('message', handleMessage);
 
   loadModels();
 </script>
