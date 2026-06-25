@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { WebView } from 'react-native-webview';
+import { Feather } from '@expo/vector-icons';
 import { getEmployees, confirmAttendance } from '../services/api';
 import { findBestMatch } from '../utils/faceMatch';
 import FACE_DETECTION_HTML from '../utils/faceDetectionHTML';
@@ -43,7 +44,7 @@ export default function AttendanceScreen({ user, onLogout }) {
     if (modelsLoaded && employees.length > 0 && !capturing && !matchResult) {
       const pulse = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.08, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
           Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
         ])
       );
@@ -129,7 +130,7 @@ export default function AttendanceScreen({ user, onLogout }) {
         case 'noFace':
           setCapturing(false);
           setStatus('No face detected. Try again.');
-          Alert.alert('No Face Detected', 'Position your face clearly in the oval guide and try again.');
+          Alert.alert('No Face Detected', 'Position your face clearly in the frame and try again.');
           break;
         case 'error':
           setCapturing(false);
@@ -170,8 +171,6 @@ export default function AttendanceScreen({ user, onLogout }) {
       setStatus('Analyzing...');
 
       const message = JSON.stringify({ type: 'detect', base64: photo.base64 });
-      // Use postMessage only — injectJavaScript with large base64 strings
-      // can exceed max JS string length or break on special characters
       webViewRef.current?.postMessage(message);
     } catch (error) {
       setCapturing(false);
@@ -213,7 +212,7 @@ export default function AttendanceScreen({ user, onLogout }) {
   if (!permission) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4338ca" />
+        <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
   }
@@ -223,13 +222,13 @@ export default function AttendanceScreen({ user, onLogout }) {
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
           <View style={styles.permissionIcon}>
-            <Text style={{ fontSize: 48 }}>📷</Text>
+            <Feather name="camera" size={42} color="#818cf8" />
           </View>
           <Text style={styles.permissionTitle}>Camera Access Required</Text>
           <Text style={styles.permissionText}>
             We need camera access to detect and recognize faces for attendance marking.
           </Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={requestPermission}>
+          <TouchableOpacity style={styles.primaryButton} onPress={requestPermission} activeOpacity={0.8}>
             <Text style={styles.primaryButtonText}>Grant Camera Access</Text>
           </TouchableOpacity>
         </View>
@@ -246,10 +245,22 @@ export default function AttendanceScreen({ user, onLogout }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#4338ca" />
+      <StatusBar barStyle="light-content" backgroundColor="#090d16" />
 
       {/* Header */}
       <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>
+            Garud<Text style={{ color: '#818cf8' }}>Attend</Text>
+          </Text>
+          <View style={styles.userBadge}>
+            <View style={styles.userDot} />
+            <Text style={styles.headerSubtitle}>Operator: {user?.name || 'Authorized'}</Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.7}>
+          <Feather name="log-out" size={18} color="#94a3b8" />
+        </TouchableOpacity>
       </View>
 
       {/* Status Chip */}
@@ -260,7 +271,7 @@ export default function AttendanceScreen({ user, onLogout }) {
           modelsLoaded ? styles.dotOrange : styles.dotYellow,
         ]} />
         <Text style={styles.statusText} numberOfLines={1}>{status}</Text>
-        {capturing && <ActivityIndicator size="small" color="#6366f1" style={{ marginLeft: 8 }} />}
+        {capturing && <ActivityIndicator size="small" color="#818cf8" style={{ marginLeft: 8 }} />}
       </View>
 
       {/* Camera Area */}
@@ -290,7 +301,7 @@ export default function AttendanceScreen({ user, onLogout }) {
                 </View>
 
                 <Text style={styles.cameraHint}>
-                  {capturing ? 'Hold still...' : 'Position face in frame'}
+                  {capturing ? 'Scanning face... Hold still' : 'Position face inside the markers'}
                 </Text>
               </View>
             </CameraView>
@@ -304,7 +315,7 @@ export default function AttendanceScreen({ user, onLogout }) {
             onPress={() => setFacing(f => f === 'front' ? 'back' : 'front')}
             activeOpacity={0.7}
           >
-            <Text style={styles.flipText}>🔄</Text>
+            <Feather name="refresh-cw" size={18} color="#ffffff" />
           </TouchableOpacity>
         )}
       </View>
@@ -319,7 +330,7 @@ export default function AttendanceScreen({ user, onLogout }) {
         >
           <View style={styles.resultLeft}>
             <View style={styles.resultBadge}>
-              <Text style={styles.resultBadgeText}>✓</Text>
+              <Feather name="check" size={20} color="#10b981" />
             </View>
             <View style={styles.resultInfo}>
               <Text style={styles.resultName}>{matchResult.employee.name}</Text>
@@ -327,7 +338,7 @@ export default function AttendanceScreen({ user, onLogout }) {
             </View>
           </View>
           <View style={styles.confidenceTag}>
-            <Text style={styles.confidenceText}>{matchResult.confidence}%</Text>
+            <Text style={styles.confidenceText}>{matchResult.confidence}% match</Text>
           </View>
         </Animated.View>
       )}
@@ -347,13 +358,24 @@ export default function AttendanceScreen({ user, onLogout }) {
             >
               {capturing ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator color="#fff" size="small" />
-                  <Text style={styles.captureButtonText}>  Scanning...</Text>
+                  <ActivityIndicator color="#fff" size="small" style={{ marginRight: 8 }} />
+                  <Text style={styles.captureButtonText}>Scanning Face...</Text>
+                </View>
+              ) : !modelsLoaded ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#fff" size="small" style={{ marginRight: 8 }} />
+                  <Text style={styles.captureButtonText}>Loading AI Models...</Text>
+                </View>
+              ) : employees.length === 0 ? (
+                <View style={styles.loadingRow}>
+                  <Feather name="alert-circle" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.captureButtonText}>No Registered Employees</Text>
                 </View>
               ) : (
-                <Text style={styles.captureButtonText}>
-                  {!modelsLoaded ? '⏳  Loading Models...' : employees.length === 0 ? 'No Employees' : '📸  Capture & Recognize'}
-                </Text>
+                <View style={styles.loadingRow}>
+                  <Feather name="aperture" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.captureButtonText}>Capture & Recognize</Text>
+                </View>
               )}
             </TouchableOpacity>
           </Animated.View>
@@ -367,11 +389,14 @@ export default function AttendanceScreen({ user, onLogout }) {
             >
               {confirming ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator color="#fff" size="small" />
-                  <Text style={styles.actionButtonText}>  Marking...</Text>
+                  <ActivityIndicator color="#fff" size="small" style={{ marginRight: 8 }} />
+                  <Text style={styles.actionButtonText}>Marking...</Text>
                 </View>
               ) : (
-                <Text style={styles.actionButtonText}>✓  Confirm</Text>
+                <View style={styles.loadingRow}>
+                  <Feather name="check-circle" size={18} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.actionButtonText}>Confirm</Text>
+                </View>
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -379,7 +404,10 @@ export default function AttendanceScreen({ user, onLogout }) {
               onPress={resetState}
               activeOpacity={0.8}
             >
-              <Text style={styles.retakeText}>↺  Retake</Text>
+              <View style={styles.loadingRow}>
+                <Feather name="rotate-ccw" size={16} color="#cbd5e1" style={{ marginRight: 8 }} />
+                <Text style={styles.retakeText}>Retake</Text>
+              </View>
             </TouchableOpacity>
           </View>
         )}
@@ -404,28 +432,30 @@ export default function AttendanceScreen({ user, onLogout }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#090d16',
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 30,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#090d16',
   },
   permissionIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(99,102,241,0.15)',
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.25)',
   },
   permissionTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#f1f5f9',
+    color: '#ffffff',
     marginBottom: 8,
   },
   permissionText: {
@@ -439,10 +469,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#4338ca',
+    backgroundColor: 'rgba(9, 13, 22, 0.95)',
     paddingHorizontal: 20,
     paddingVertical: 14,
-    paddingTop: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
   },
   headerLeft: {
     flex: 1,
@@ -450,7 +481,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#fff',
+    color: '#ffffff',
     letterSpacing: -0.3,
   },
   userBadge: {
@@ -459,39 +490,42 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   userDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#34d399',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10b981',
     marginRight: 6,
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
   },
   headerSubtitle: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
+    color: '#94a3b8',
+    fontWeight: '500',
   },
   logoutBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  logoutText: {
-    fontSize: 18,
-    color: '#fff',
   },
   statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1e293b',
+    backgroundColor: 'rgba(22, 28, 45, 0.65)',
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 16,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   statusDot: {
     width: 8,
@@ -499,28 +533,51 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginRight: 10,
   },
-  dotGreen: { backgroundColor: '#34d399' },
-  dotYellow: { backgroundColor: '#fbbf24' },
-  dotOrange: { backgroundColor: '#fb923c' },
+  dotGreen: { 
+    backgroundColor: '#10b981',
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+  },
+  dotYellow: { 
+    backgroundColor: '#f59e0b',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+  },
+  dotOrange: { 
+    backgroundColor: '#f97316',
+    shadowColor: '#f97316',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+  },
   statusText: {
     flex: 1,
     fontSize: 13,
     color: '#cbd5e1',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   cameraWrapper: {
     flex: 1,
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 16,
     position: 'relative',
   },
   cameraContainer: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: '#000',
-    borderWidth: 2,
-    borderColor: '#334155',
+    backgroundColor: '#020617',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 10,
   },
   camera: {
     flex: 1,
@@ -533,7 +590,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
   faceGuideArea: {
     width: 220,
@@ -542,8 +599,8 @@ const styles = StyleSheet.create({
   },
   corner: {
     position: 'absolute',
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
     borderColor: '#818cf8',
     borderWidth: 3,
   },
@@ -579,49 +636,63 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 10,
     right: 10,
-    height: 2,
+    height: 3,
     backgroundColor: '#818cf8',
     top: '50%',
     shadowColor: '#818cf8',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    elevation: 6,
   },
   cameraHint: {
-    color: 'rgba(255,255,255,0.8)',
+    color: '#cbd5e1',
     fontSize: 13,
     fontWeight: '600',
-    marginTop: 16,
+    marginTop: 24,
     letterSpacing: 0.5,
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    overflow: 'hidden',
   },
   flipBtn: {
     position: 'absolute',
-    bottom: 12,
-    right: 12,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(30,41,59,0.85)',
+    bottom: 16,
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#475569',
-  },
-  flipText: {
-    fontSize: 20,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
   resultCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1e293b',
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 16,
     padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#34d399',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   resultLeft: {
     flexDirection: 'row',
@@ -629,17 +700,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   resultBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(52,211,153,0.15)',
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-  },
-  resultBadgeText: {
-    fontSize: 22,
-    color: '#34d399',
   },
   resultInfo: {
     flex: 1,
@@ -647,7 +714,7 @@ const styles = StyleSheet.create({
   resultName: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#f1f5f9',
+    color: '#ffffff',
   },
   resultId: {
     fontSize: 13,
@@ -655,38 +722,42 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   confidenceTag: {
-    backgroundColor: 'rgba(99,102,241,0.2)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
   },
   confidenceText: {
-    color: '#a5b4fc',
-    fontSize: 15,
+    color: '#34d399',
+    fontSize: 13,
     fontWeight: '700',
   },
   actions: {
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 16,
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
   captureButton: {
-    backgroundColor: '#4338ca',
+    backgroundColor: '#4f46e5',
     borderRadius: 16,
     padding: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#4338ca',
-    shadowOffset: { width: 0, height: 6 },
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
-    shadowRadius: 12,
+    shadowRadius: 16,
     elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   captureButtonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.3,
@@ -699,48 +770,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 12,
     elevation: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   retakeButton: {
-    backgroundColor: '#1e293b',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 16,
     padding: 18,
-    paddingHorizontal: 22,
+    paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#475569',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   retakeText: {
     color: '#cbd5e1',
-    fontWeight: '600',
+    fontWeight: '700',
     fontSize: 15,
   },
   loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   primaryButton: {
-    backgroundColor: '#4338ca',
+    backgroundColor: '#4f46e5',
     borderRadius: 16,
     padding: 18,
     paddingHorizontal: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
   primaryButtonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '700',
   },
   actionButtonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '700',
   },

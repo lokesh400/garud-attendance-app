@@ -12,6 +12,7 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { login } from '../services/api';
 
 const { width } = Dimensions.get('window');
@@ -71,7 +72,7 @@ export default function LoginScreen({ onLoginSuccess }) {
 
   return (
     <View style={styles.container}>
-      {/* Background decorative circles */}
+      {/* Background decorative glowing spheres */}
       <View style={styles.bgCircle1} />
       <View style={styles.bgCircle2} />
       <View style={styles.bgCircle3} />
@@ -90,10 +91,12 @@ export default function LoginScreen({ onLoginSuccess }) {
           <Animated.View style={[styles.logoContainer, { transform: [{ scale: logoScale }] }]}>
             <View style={styles.logoOuter}>
               <View style={styles.logo}>
-                <Text style={styles.logoIcon}>👁️</Text>
+                <Feather name="aperture" size={42} color="#818cf8" />
               </View>
             </View>
-            <Text style={styles.title}>GarudAttend</Text>
+            <Text style={styles.title}>
+              Garud<Text style={{ color: '#818cf8' }}>Attend</Text>
+            </Text>
             <Text style={styles.subtitle}>Smart Face Recognition Attendance</Text>
           </Animated.View>
 
@@ -107,11 +110,16 @@ export default function LoginScreen({ onLoginSuccess }) {
               styles.inputContainer,
               focusedField === 'username' && styles.inputFocused,
             ]}>
-              <Text style={styles.inputIcon}>👤</Text>
+              <Feather
+                name="user"
+                size={20}
+                color={focusedField === 'username' ? '#818cf8' : '#64748b'}
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="Username"
-                placeholderTextColor="#a0aec0"
+                placeholderTextColor="#64748b"
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
@@ -127,11 +135,16 @@ export default function LoginScreen({ onLoginSuccess }) {
               styles.inputContainer,
               focusedField === 'password' && styles.inputFocused,
             ]}>
-              <Text style={styles.inputIcon}>🔒</Text>
+              <Feather
+                name="lock"
+                size={20}
+                color={focusedField === 'password' ? '#818cf8' : '#64748b'}
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="Password"
-                placeholderTextColor="#a0aec0"
+                placeholderTextColor="#64748b"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -168,34 +181,34 @@ export default function LoginScreen({ onLoginSuccess }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#4338ca',
+    backgroundColor: '#090d16',
   },
   bgCircle1: {
     position: 'absolute',
-    width: width * 0.8,
-    height: width * 0.8,
-    borderRadius: width * 0.4,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    top: -width * 0.2,
-    right: -width * 0.2,
+    width: width * 1.1,
+    height: width * 1.1,
+    borderRadius: width * 0.55,
+    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    top: -width * 0.4,
+    right: -width * 0.3,
   },
   bgCircle2: {
     position: 'absolute',
-    width: width * 0.6,
-    height: width * 0.6,
-    borderRadius: width * 0.3,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    bottom: -width * 0.1,
-    left: -width * 0.15,
+    width: width * 0.9,
+    height: width * 0.9,
+    borderRadius: width * 0.45,
+    backgroundColor: 'rgba(168, 85, 247, 0.09)',
+    bottom: -width * 0.3,
+    left: -width * 0.2,
   },
   bgCircle3: {
     position: 'absolute',
-    width: width * 0.35,
-    height: width * 0.35,
-    borderRadius: width * 0.175,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    top: '40%',
-    left: '60%',
+    width: width * 0.5,
+    height: width * 0.5,
+    borderRadius: width * 0.25,
+    backgroundColor: 'rgba(59, 130, 246, 0.07)',
+    top: '35%',
+    left: '55%',
   },
   keyboardView: {
     flex: 1,
@@ -210,98 +223,100 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   logoOuter: {
-    width: 96,
-    height: 96,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 90,
+    height: 90,
+    borderRadius: 30,
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   logo: {
-    width: 76,
-    height: 76,
-    backgroundColor: '#fff',
+    width: 68,
+    height: 68,
+    backgroundColor: '#111827',
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
     shadowRadius: 16,
-    elevation: 12,
-  },
-  logoIcon: {
-    fontSize: 38,
+    elevation: 8,
   },
   title: {
-    fontSize: 30,
+    fontSize: 32,
     fontWeight: '800',
-    color: '#fff',
+    color: '#ffffff',
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.75)',
+    color: '#94a3b8',
     marginTop: 6,
     letterSpacing: 0.3,
   },
   formCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(22, 28, 45, 0.75)',
     borderRadius: 24,
     padding: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.12,
-    shadowRadius: 32,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.4,
+    shadowRadius: 30,
     elevation: 16,
   },
   welcomeText: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1e293b',
+    color: '#ffffff',
     marginBottom: 4,
   },
   welcomeSub: {
     fontSize: 14,
-    color: '#94a3b8',
+    color: '#64748b',
     marginBottom: 24,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     borderRadius: 14,
     paddingHorizontal: 14,
     marginBottom: 14,
     borderWidth: 1.5,
-    borderColor: '#e2e8f0',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   inputFocused: {
     borderColor: '#6366f1',
-    backgroundColor: '#f5f3ff',
+    backgroundColor: 'rgba(99, 102, 241, 0.08)',
   },
   inputIcon: {
-    fontSize: 18,
     marginRight: 10,
   },
   input: {
     flex: 1,
     paddingVertical: 15,
     fontSize: 16,
-    color: '#1e293b',
+    color: '#ffffff',
   },
   button: {
-    backgroundColor: '#4338ca',
+    backgroundColor: '#4f46e5',
     borderRadius: 14,
-    padding: 17,
+    padding: 16,
     alignItems: 'center',
     marginTop: 10,
-    shadowColor: '#4338ca',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
     elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   buttonDisabled: {
     opacity: 0.7,
@@ -311,29 +326,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.3,
-  },
-  hintCard: {
-    marginTop: 24,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  hintTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.8)',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  hintText: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 13,
   },
 });
