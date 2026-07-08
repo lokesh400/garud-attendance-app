@@ -16,7 +16,7 @@ export function euclideanDistance(a, b) {
 
 // Find the best matching employee from a face descriptor
 // Returns { employee, distance, confidence } or null if no match
-export function findBestMatch(descriptor, employees, threshold = 0.6) {
+export function findBestMatch(descriptor, employees, threshold = 0.35) {
   const thresholdSq = threshold * threshold;
   let bestMatch = null;
   let minDistSq = Infinity;

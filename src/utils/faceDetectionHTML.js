@@ -68,7 +68,7 @@ const FACE_DETECTION_HTML = `
           const canvas = downscaleToCanvas(img);
 
           const detection = await faceapi
-            .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+            .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
             .withFaceLandmarks(true)
             .withFaceDescriptor();
 
